@@ -33,8 +33,10 @@ class Model(object):
         """
         self.rng = np.random.default_rng(seed=0)
         
-        self.kernel =  RationalQuadratic() #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
-        self.model = GaussianProcessRegressor(kernel=self.kernel, random_state=0)
+        noise_kernel = 0.1**2 * RBF(length_scale=0.1) + WhiteKernel(noise_level=0.1**2, noise_level_bounds=(1e-5, 1e5))
+
+        self.kernel =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel #5.0**2 * RBF(length_scale=[10.0,10.0]) #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
+        self.model = GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
         
         #self.model = KNNR(n_neighbors=11, weights='distance')
 
@@ -55,8 +57,11 @@ class Model(object):
         # TODO: Use the GP posterior to form your predictions here
         
         gp_mean, gp_std = self.model.predict(test_x_2D, True, False)
-        predictions = gp_mean
+        predictions = gp_mean + self.y_mean
         #predictions = self.model.predict(test_x_2D)
+        
+        mask = [bool(AREA_idx) for AREA_idx in test_x_AREA]
+        predictions += mask*gp_std*1.2
 
         return predictions, gp_mean, gp_std
 
@@ -66,8 +71,39 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        self.model.fit(train_x_2D, train_y)
+        
+        X_train, X_test, y_train, y_test = train_test_split(train_x_2D, train_y, test_size=0.3, random_state=42)
+        self.y_mean = y_train.mean()
+        self.model.fit(X_train, y_train-self.y_mean)
         pass
+
+    def make_custom_distribution(self, data, desired_distribution):
+        pass
+    #     for label, desired_percentage in desired_distribution.items():
+    #         current_percentage = current_distribution.get(label, 0) / len(data)
+    #         if current_percentage < desired_percentage:
+    #             # Oversample the class
+    #             oversampled_data = resample(
+    #                 [sample for sample in data if sample[1] == label],
+    #                 n_samples=int(len(data) * (desired_percentage - current_percentage)),
+    #                 random_state=42,
+    #             )
+    #             new_data.extend(oversampled_data)
+    #         elif current_percentage > desired_percentage:
+    #             # Undersample the class
+    #             undersampled_data = resample(
+    #                 [sample for sample in data if sample[1] == label],
+    #                 n_samples=int(len(data) * (current_percentage - desired_percentage)),
+    #                 replace=False,
+    #                 random_state=42,
+    #             )
+    #             new_data.extend(undersampled_data)
+    #         else:
+    #             # No need to modify this class
+    #             new_data.extend([sample for sample in data if sample[1] == label])
+
+    # # Shuffle the new dataset
+    # np.random.shuffle(new_data)
 
 # You don't have to change this function
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
@@ -184,7 +220,6 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
     test_x_2D = np.zeros((test_x.shape[0], 2), dtype=float)
     test_x_AREA = np.zeros((test_x.shape[0],), dtype=bool)
 
-    #TODO: Extract the city_area information from the training and test features
     train_x_2D[:] = train_x[:,:2]
     train_x_AREA[:] = train_x[:,-1] 
     test_x_2D[:] = test_x[:,:2]
@@ -201,7 +236,6 @@ def scatter_plot(x1, y1, x2, y2, train_x_AREA, test_x_AREA):
 
     colors = ['blue' if value > 0.5 else 'red' for value in train_x_AREA]
         
-    # Plot the first scatter subplot
     ax1.scatter(x1, y1, c=colors, label='Training data')
     ax1.set_title('Training data distribution')
     ax1.set_xlabel('X-axis')
@@ -209,17 +243,13 @@ def scatter_plot(x1, y1, x2, y2, train_x_AREA, test_x_AREA):
     ax1.legend()
 
     colors = ['blue' if value > 0.5 else 'red' for value in test_x_AREA]
-    # Plot the second scatter subplot
     ax2.scatter(x2, y2, c=colors, label='Test data')
     ax2.set_title('Test data distribution')
     ax2.set_xlabel('X-axis')
     ax2.set_ylabel('Y-axis')
     ax2.legend()
 
-    # Adjust layout to prevent subplot labels from overlapping
     plt.tight_layout()
-
-    # Display the plot
     plt.show()
 
 # you don't have to change this function
@@ -235,8 +265,7 @@ def main():
     print('Fitting model')
     model = Model()
     if True:
-        
-        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.5, random_state=42)
+        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.84, random_state=42)
         model.fitting_model(y_train,X_train)
 
         # Predict on the test features
@@ -250,6 +279,9 @@ def main():
         if EXTENDED_EVALUATION:
             perform_extended_evaluation(model, output_dir='.')
     else:
+        count_res = np.count_nonzero(train_x_AREA == 1)
+        count_non_res = train_x_AREA.shape[0]-count_res
+        print(count_res, count_non_res)
         scatter_plot(train_x_2D[:,0],train_x_2D[:,1], test_x_2D[:,0],test_x_2D[:,1], train_x_AREA, test_x_AREA)
 
 
