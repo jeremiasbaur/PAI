@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 from sklearn.neighbors import KNeighborsRegressor as KNNR
+from sklearn.model_selection import train_test_split
 
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
@@ -32,10 +33,10 @@ class Model(object):
         """
         self.rng = np.random.default_rng(seed=0)
         
-        self.kernel = 1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
+        self.kernel =  RationalQuadratic() #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
         self.model = GaussianProcessRegressor(kernel=self.kernel, random_state=0)
         
-        self.model = KNNR(n_neighbors=10, weights='distance')
+        #self.model = KNNR(n_neighbors=11, weights='distance')
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -53,9 +54,9 @@ class Model(object):
 
         # TODO: Use the GP posterior to form your predictions here
         
-        #gp_mean, gp_std = self.model.predict(test_x_2D, True, False)
-        #predictions = gp_mean
-        predictions = self.model.predict(test_x_2D)
+        gp_mean, gp_std = self.model.predict(test_x_2D, True, False)
+        predictions = gp_mean
+        #predictions = self.model.predict(test_x_2D)
 
         return predictions, gp_mean, gp_std
 
@@ -170,7 +171,6 @@ def perform_extended_evaluation(model: Model, output_dir: str = '/results'):
 
     plt.show()
 
-
 def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Extracts the city_area information from the training and test features.
@@ -187,12 +187,40 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
     #TODO: Extract the city_area information from the training and test features
     train_x_2D[:] = train_x[:,:2]
     train_x_AREA[:] = train_x[:,-1] 
+    test_x_2D[:] = test_x[:,:2]
+    test_x_AREA[:] = test_x[:,-1] 
 
     assert train_x_2D.shape[0] == train_x_AREA.shape[0] and test_x_2D.shape[0] == test_x_AREA.shape[0]
     assert train_x_2D.shape[1] == 2 and test_x_2D.shape[1] == 2
     assert train_x_AREA.ndim == 1 and test_x_AREA.ndim == 1
 
     return train_x_2D, train_x_AREA, test_x_2D, test_x_AREA
+
+def scatter_plot(x1, y1, x2, y2, train_x_AREA, test_x_AREA):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+    colors = ['blue' if value > 0.5 else 'red' for value in train_x_AREA]
+        
+    # Plot the first scatter subplot
+    ax1.scatter(x1, y1, c=colors, label='Training data')
+    ax1.set_title('Training data distribution')
+    ax1.set_xlabel('X-axis')
+    ax1.set_ylabel('Y-axis')
+    ax1.legend()
+
+    colors = ['blue' if value > 0.5 else 'red' for value in test_x_AREA]
+    # Plot the second scatter subplot
+    ax2.scatter(x2, y2, c=colors, label='Test data')
+    ax2.set_title('Test data distribution')
+    ax2.set_xlabel('X-axis')
+    ax2.set_ylabel('Y-axis')
+    ax2.legend()
+
+    # Adjust layout to prevent subplot labels from overlapping
+    plt.tight_layout()
+
+    # Display the plot
+    plt.show()
 
 # you don't have to change this function
 def main():
@@ -208,24 +236,21 @@ def main():
     model = Model()
     if True:
         
-
-        model.fitting_model(train_y[:-1000],train_x_2D[:-1000])
+        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.5, random_state=42)
+        model.fitting_model(y_train,X_train)
 
         # Predict on the test features
         print('Predicting on test features')
         #predictions = model.make_predictions(test_x_2D, test_x_AREA)
         #print(predictions)
         
-        predictions2 = model.make_predictions(train_x_2D[-1000:], test_x_AREA[-1000:])
-        print(cost_function(train_y[-1000:],predictions2[0], train_x_AREA[-1000:]))
+        predictions2 = model.make_predictions(X_test[:1000], area_test[:1000])
+        print(cost_function(y_test[:1000],predictions2[0], area_test[:1000]))
 
         if EXTENDED_EVALUATION:
             perform_extended_evaluation(model, output_dir='.')
     else:
-        print(train_x_2D[-1000:])
-        colors = ['blue' if value > 0.5 else 'red' for value in train_x_AREA]
-        plt.scatter(train_x_2D[:,0],train_x_2D[:,1], c=colors)
-        plt.show()
+        scatter_plot(train_x_2D[:,0],train_x_2D[:,1], test_x_2D[:,0],test_x_2D[:,1], train_x_AREA, test_x_AREA)
 
 
 if __name__ == "__main__":
