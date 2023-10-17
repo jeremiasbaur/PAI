@@ -38,6 +38,11 @@ class Model(object):
         self.kernel =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel #5.0**2 * RBF(length_scale=[10.0,10.0]) #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
         self.model = GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
         
+        self.gp1=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
+        self.gp2=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
+        self.gp3=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
+        self.gp4=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
+
         #self.model = KNNR(n_neighbors=11, weights='distance')
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -71,11 +76,54 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
+        min_x = np.min(train_x_2D[:,0])
+        min_y = np.min(train_x_2D[:,1])
+        max_x = np.max(train_x_2D[:,0])
+        max_y = np.max(train_x_2D[:,1])
+        mid_x = (max_x+min_x)/2
+        mid_y = (max_y+min_y)/2
+
+        gp1_index = []
+        gp2_index = []
+        gp3_index = []
+        gp4_index = []
+        for index, pair in enumerate(train_x_2D):
+            if pair[0] < mid_x:
+                if pair[1] < mid_y:
+                    gp1_index.append(index)
+                else:
+                    gp4_index.append(index)
+            else:
+                if pair[1] < mid_y:
+                    gp2_index.append(index)
+                else:
+                    gp3_index.append(index)
+
+        gp1_train = np.array([train_x_2D[index,:] for index in gp1_index])
+        gp2_train = np.array([train_x_2D[index,:] for index in gp2_index])
+        gp3_train = np.array([train_x_2D[index,:] for index in gp3_index])
+        gp4_train = np.array([train_x_2D[index,:] for index in gp4_index])
+
+        gp1_y = np.array([train_y[index] for index in gp1_index])
+        gp2_y = np.array([train_y[index] for index in gp2_index])
+        gp3_y = np.array([train_y[index] for index in gp3_index])
+        gp4_y = np.array([train_y[index] for index in gp4_index])
+
+        #X_train, X_test, y_train, y_test = train_test_split(train_x_2D, train_y, test_size=0.3, random_state=42)
         
-        X_train, X_test, y_train, y_test = train_test_split(train_x_2D, train_y, test_size=0.3, random_state=42)
-        self.y_mean = y_train.mean()
-        self.model.fit(X_train, y_train-self.y_mean)
-        pass
+        self.gp1_y_mean = gp1_y.mean()
+        self.gp2_y_mean = gp2_y.mean()
+        self.gp3_y_mean = gp3_y.mean()
+        self.gp4_y_mean = gp4_y.mean()
+        
+        #self.y_mean = y_train.mean()
+        #self.model.fit(X_train, y_train-self.y_mean)
+        
+        self.gp1.fit(gp1_train, gp1_y-self.gp1_y_mean)
+        self.gp2.fit(gp2_train, gp2_y-self.gp2_y_mean)
+        self.gp3.fit(gp3_train, gp3_y-self.gp3_y_mean)
+        self.gp4.fit(gp4_train, gp4_y-self.gp4_y_mean)
+
 
     def make_custom_distribution(self, data, desired_distribution):
         pass
