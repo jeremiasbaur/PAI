@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
 EXTENDED_EVALUATION = True
-EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
+EVALUATION_GRID_POINTS = 150  # Number of grid points used in extended evaluation
 
 # Cost function constants
 COST_W_UNDERPREDICT = 50.0
@@ -55,14 +55,30 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
-        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
         gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
         gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
+        predictions = np.zeros(test_x_2D.shape[0], dtype=float)
 
-        # TODO: Use the GP posterior to form your predictions here
+        model = None
+        for index, pair in enumerate(test_x_2D):
+            if pair[0] < self.mid_x:
+                if pair[1] < self.mid_y:
+                    gp_mean[index], gp_std[index] = self.gp1.predict(pair.reshape(1,-1), True, False)
+                    predictions[index] = gp_mean[index] + self.gp1_y_mean
+                else:
+                    gp_mean[index], gp_std[index] = self.gp4.predict(pair.reshape(1,-1), True, False)
+                    predictions[index] = gp_mean[index] + self.gp4_y_mean
+            else:
+                if pair[1] < self.mid_y:
+                    gp_mean[index], gp_std[index] = self.gp2.predict(pair.reshape(1,-1), True, False)
+                    predictions[index] = gp_mean[index] + self.gp2_y_mean
+                else:
+                    gp_mean[index], gp_std[index] = self.gp3.predict(pair.reshape(1,-1), True, False)
+                    predictions[index] = gp_mean[index] + self.gp3_y_mean
+
         
-        gp_mean, gp_std = self.model.predict(test_x_2D, True, False)
-        predictions = gp_mean + self.y_mean
+        #gp_mean, gp_std = self.model.predict(test_x_2D, True, False)
+        #predictions = gp_mean + self.y_mean
         #predictions = self.model.predict(test_x_2D)
         
         mask = [bool(AREA_idx) for AREA_idx in test_x_AREA]
@@ -76,25 +92,25 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        min_x = np.min(train_x_2D[:,0])
-        min_y = np.min(train_x_2D[:,1])
-        max_x = np.max(train_x_2D[:,0])
-        max_y = np.max(train_x_2D[:,1])
-        mid_x = (max_x+min_x)/2
-        mid_y = (max_y+min_y)/2
+        self.min_x = np.min(train_x_2D[:,0])
+        self.min_y = np.min(train_x_2D[:,1])
+        self.max_x = np.max(train_x_2D[:,0])
+        self.max_y = np.max(train_x_2D[:,1])
+        self.mid_x = (self.max_x+self.min_x)/2
+        self.mid_y = (self.max_y+self.min_y)/2
 
         gp1_index = []
         gp2_index = []
         gp3_index = []
         gp4_index = []
         for index, pair in enumerate(train_x_2D):
-            if pair[0] < mid_x:
-                if pair[1] < mid_y:
+            if pair[0] < self.mid_x:
+                if pair[1] < self.mid_y:
                     gp1_index.append(index)
                 else:
                     gp4_index.append(index)
             else:
-                if pair[1] < mid_y:
+                if pair[1] < self.mid_y:
                     gp2_index.append(index)
                 else:
                     gp3_index.append(index)
@@ -115,13 +131,19 @@ class Model(object):
         self.gp2_y_mean = gp2_y.mean()
         self.gp3_y_mean = gp3_y.mean()
         self.gp4_y_mean = gp4_y.mean()
-        
+
+        print(f'Len gp1: {len(gp1_y)}, Len gp2: {len(gp2_y)}, Len gp3: {len(gp3_y)}, Len gp4: {len(gp4_y)}')
+
         #self.y_mean = y_train.mean()
         #self.model.fit(X_train, y_train-self.y_mean)
-        
+
+        print("Training GP1")        
         self.gp1.fit(gp1_train, gp1_y-self.gp1_y_mean)
+        print("Training GP2")
         self.gp2.fit(gp2_train, gp2_y-self.gp2_y_mean)
+        print("Training GP3")
         self.gp3.fit(gp3_train, gp3_y-self.gp3_y_mean)
+        print("Training GP4")
         self.gp4.fit(gp4_train, gp4_y-self.gp4_y_mean)
 
 
@@ -313,7 +335,7 @@ def main():
     print('Fitting model')
     model = Model()
     if True:
-        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.84, random_state=42)
+        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.2, random_state=42)
         model.fitting_model(y_train,X_train)
 
         # Predict on the test features
@@ -321,8 +343,11 @@ def main():
         #predictions = model.make_predictions(test_x_2D, test_x_AREA)
         #print(predictions)
         
-        predictions2 = model.make_predictions(X_test[:1000], area_test[:1000])
-        print(cost_function(y_test[:1000],predictions2[0], area_test[:1000]))
+        #for index, pair in enumerate(X_train):
+        #   print(index, pair.reshape(-1,1), model.gp1.predict(pair.reshape(1,-1)))
+
+        predictions2 = model.make_predictions(X_test, area_test)
+        print(cost_function(y_test,predictions2[0], area_test))
 
         if EXTENDED_EVALUATION:
             perform_extended_evaluation(model, output_dir='.')
