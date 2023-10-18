@@ -35,13 +35,16 @@ class Model(object):
         
         noise_kernel = 0.1**2 * RBF(length_scale=0.1) + WhiteKernel(noise_level=0.1**2, noise_level_bounds=(1e-5, 1e5))
 
-        self.kernel =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel #5.0**2 * RBF(length_scale=[10.0,10.0]) #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
-        self.model = GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
+        self.kernel1 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel #5.0**2 * RBF(length_scale=[10.0,10.0]) #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
+        self.kernel2 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel
+        self.kernel3 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel
+        self.kernel4 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel
+        self.model = GaussianProcessRegressor(kernel=self.kernel1, random_state=0, normalize_y=False)
         
-        self.gp1=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
-        self.gp2=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
-        self.gp3=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
-        self.gp4=GaussianProcessRegressor(kernel=self.kernel, random_state=0, normalize_y=False)
+        self.gp1=GaussianProcessRegressor(kernel=self.kernel1, random_state=0, normalize_y=False)
+        self.gp2=GaussianProcessRegressor(kernel=self.kernel2, random_state=0, normalize_y=False)
+        self.gp3=GaussianProcessRegressor(kernel=self.kernel3, random_state=0, normalize_y=False)
+        self.gp4=GaussianProcessRegressor(kernel=self.kernel4, random_state=0, normalize_y=False)
 
         #self.model = KNNR(n_neighbors=11, weights='distance')
 
@@ -82,7 +85,7 @@ class Model(object):
         #predictions = self.model.predict(test_x_2D)
         
         mask = [bool(AREA_idx) for AREA_idx in test_x_AREA]
-        predictions += mask*gp_std*1.2
+        predictions += mask*gp_std*0.2
 
         return predictions, gp_mean, gp_std
 
@@ -335,7 +338,7 @@ def main():
     print('Fitting model')
     model = Model()
     if True:
-        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.01, random_state=42)
         model.fitting_model(y_train,X_train)
 
         # Predict on the test features
