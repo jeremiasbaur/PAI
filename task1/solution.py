@@ -11,8 +11,8 @@ from sklearn.model_selection import train_test_split
 
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
-EXTENDED_EVALUATION = True
-EVALUATION_GRID_POINTS = 150  # Number of grid points used in extended evaluation
+EXTENDED_EVALUATION = False
+EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
 
 # Cost function constants
 COST_W_UNDERPREDICT = 50.0
@@ -32,21 +32,27 @@ class Model(object):
         We already provide a random number generator for reproducibility.
         """
         self.rng = np.random.default_rng(seed=0)
-        
-        noise_kernel = 0.1**2 * RBF(length_scale=0.1) + WhiteKernel(noise_level=0.1**2, noise_level_bounds=(1e-5, 1e5))
 
-        self.kernel1 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel #5.0**2 * RBF(length_scale=[10.0,10.0]) #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
-        self.kernel2 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel
-        self.kernel3 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel
-        self.kernel4 =  0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + noise_kernel
-        self.model = GaussianProcessRegressor(kernel=self.kernel1, random_state=0, normalize_y=False)
+        # TODO: Add custom initialization for your model here if necessary
+
+
+        #self.kernel = 1.0 * Matern(length_scale=1.0, nu=10)
+        #self.kernel = RationalQuadratic(length_scale=1.0, alpha=1.5) + WhiteKernel(noise_level=1.0)
+        #self.gpr = GaussianProcessRegressor(kernel=self.kernel, random_state=0)
+
+        # noise_kernel = 0.1**2 * RBF(length_scale=0.1) + WhiteKernel(noise_level=0.1**2, noise_level_bounds=(1e-5, 1e5))
+        noise_kernel = 0.1**2 * Matern(length_scale=1.0, nu=10) + WhiteKernel(noise_level=0.1**2, noise_level_bounds=(1e-5, 1e5))
+
+        self.kernel1 =  noise_kernel #5.0**2 * RBF(length_scale=[10.0,10.0]) #1.0*RBF([1.0,1.0])#DotProduct() + WhiteKernel()
+        self.kernel2 =  noise_kernel
+        self.kernel3 =  noise_kernel
+        self.kernel4 =  noise_kernel # 0.8**2 * RationalQuadratic(length_scale=2.0, alpha=2) + 
+        #self.model = GaussianProcessRegressor(kernel=self.kernel1, random_state=0, normalize_y=False)
         
         self.gp1=GaussianProcessRegressor(kernel=self.kernel1, random_state=0, normalize_y=False)
         self.gp2=GaussianProcessRegressor(kernel=self.kernel2, random_state=0, normalize_y=False)
         self.gp3=GaussianProcessRegressor(kernel=self.kernel3, random_state=0, normalize_y=False)
         self.gp4=GaussianProcessRegressor(kernel=self.kernel4, random_state=0, normalize_y=False)
-
-        #self.model = KNNR(n_neighbors=11, weights='distance')
 
     def make_predictions(self, test_x_2D: np.ndarray, test_x_AREA: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -58,8 +64,13 @@ class Model(object):
             containing your predictions, the GP posterior mean, and the GP posterior stddev (in that order)
         """
 
+        # TODO: Use your GP to estimate the posterior mean and stddev for each city_area here
         gp_mean = np.zeros(test_x_2D.shape[0], dtype=float)
         gp_std = np.zeros(test_x_2D.shape[0], dtype=float)
+
+        # TODO: Use the GP posterior to form your predictions here
+        #predictions = self.gpr.predict(test_x_2D)
+
         predictions = np.zeros(test_x_2D.shape[0], dtype=float)
 
         model = None
@@ -79,13 +90,8 @@ class Model(object):
                     gp_mean[index], gp_std[index] = self.gp3.predict(pair.reshape(1,-1), True, False)
                     predictions[index] = gp_mean[index] + self.gp3_y_mean
 
-        
-        #gp_mean, gp_std = self.model.predict(test_x_2D, True, False)
-        #predictions = gp_mean + self.y_mean
-        #predictions = self.model.predict(test_x_2D)
-        
         mask = [bool(AREA_idx) for AREA_idx in test_x_AREA]
-        predictions += mask*gp_std*0.2
+        predictions += mask*gp_std*1
 
         return predictions, gp_mean, gp_std
 
@@ -95,41 +101,53 @@ class Model(object):
         :param train_x_2D: Training features as a 2d NumPy float array of shape (NUM_SAMPLES, 2)
         :param train_y: Training pollution concentrations as a 1d NumPy float array of shape (NUM_SAMPLES,)
         """
-        self.min_x = np.min(train_x_2D[:,0])
-        self.min_y = np.min(train_x_2D[:,1])
-        self.max_x = np.max(train_x_2D[:,0])
-        self.max_y = np.max(train_x_2D[:,1])
-        self.mid_x = (self.max_x+self.min_x)/2
-        self.mid_y = (self.max_y+self.min_y)/2
+
+        #subset_x = train_x_2D[::10]
+        #subset_y = train_y[::10]
+        #print(subset_y.shape)
+
+        # TODO: Fit your model here
+        #self.gpr.fit(subset_x, subset_y)
+
+        # TODO: Increase number of smaller subsets
+        self.min_x = np.min(train_x_2D[:,0])    # min x coordinate 
+        self.min_y = np.min(train_x_2D[:,1])    # min y coordinate
+        self.max_x = np.max(train_x_2D[:,0])    # max x coordinate
+        self.max_y = np.max(train_x_2D[:,1])    # max y coordinate
+        self.mid_x = (self.max_x+self.min_x)/2  # mid x coordinate 
+        self.mid_y = (self.max_y+self.min_y)/2  # mid y coordinate
 
         gp1_index = []
         gp2_index = []
         gp3_index = []
         gp4_index = []
         for index, pair in enumerate(train_x_2D):
-            if pair[0] < self.mid_x:
-                if pair[1] < self.mid_y:
-                    gp1_index.append(index)
-                else:
-                    gp4_index.append(index)
-            else:
-                if pair[1] < self.mid_y:
-                    gp2_index.append(index)
-                else:
-                    gp3_index.append(index)
+            if pair[0] < self.mid_x:            # If x coordinate of sample is smaller than the mid coordinate
+                if pair[1] < self.mid_y:        # If y coordinate of sample is smaller than the mid coordinate
+                    gp1_index.append(index)     # put index into training set 1
+                else:                           # If y coordinate of sample is larger than the mid coordinate
+                    gp4_index.append(index)     # put index into training set 4
+            else:                               # If x coordinate of sample is larger than the mid coordinate
+                if pair[1] < self.mid_y:        # If y coordinate of sample is smaller than the mid coordinate
+                    gp2_index.append(index)     # put index into training set 2
+                else:                           # If y coordinate of sample is larger than the mid coordinate
+                    gp3_index.append(index)     # put index into training set 3
 
-        gp1_train = np.array([train_x_2D[index,:] for index in gp1_index])
-        gp2_train = np.array([train_x_2D[index,:] for index in gp2_index])
-        gp3_train = np.array([train_x_2D[index,:] for index in gp3_index])
-        gp4_train = np.array([train_x_2D[index,:] for index in gp4_index])
+        # Put samples into seperate numpy arrays 
+        gp1_train = np.array([train_x_2D[index,:] for index in gp1_index[::8]])
+        gp2_train = np.array([train_x_2D[index,:] for index in gp2_index[::8]])
+        gp3_train = np.array([train_x_2D[index,:] for index in gp3_index[::8]])
+        gp4_train = np.array([train_x_2D[index,:] for index in gp4_index[::8]])
 
-        gp1_y = np.array([train_y[index] for index in gp1_index])
-        gp2_y = np.array([train_y[index] for index in gp2_index])
-        gp3_y = np.array([train_y[index] for index in gp3_index])
-        gp4_y = np.array([train_y[index] for index in gp4_index])
+        # Put measurements into seperate numpy arrays
+        gp1_y = np.array([train_y[index] for index in gp1_index[::8]])
+        gp2_y = np.array([train_y[index] for index in gp2_index[::8]])
+        gp3_y = np.array([train_y[index] for index in gp3_index[::8]])
+        gp4_y = np.array([train_y[index] for index in gp4_index[::8]])
 
         #X_train, X_test, y_train, y_test = train_test_split(train_x_2D, train_y, test_size=0.3, random_state=42)
         
+        # Calculate y mean for each sample space
         self.gp1_y_mean = gp1_y.mean()
         self.gp2_y_mean = gp2_y.mean()
         self.gp3_y_mean = gp3_y.mean()
@@ -140,43 +158,23 @@ class Model(object):
         #self.y_mean = y_train.mean()
         #self.model.fit(X_train, y_train-self.y_mean)
 
+        # Fit each GPR on the corresponding training set
         print("Training GP1")        
         self.gp1.fit(gp1_train, gp1_y-self.gp1_y_mean)
+        params1 = self.kernel1.get_params()
+        for key in sorted(params1): print("%s : %s" % (key, params1[key]))
         print("Training GP2")
-        self.gp2.fit(gp2_train, gp2_y-self.gp2_y_mean)
+        self.gp2.fit(gp2_train, gp2_y-self.gp2_y_mean)  
+        params2 = self.kernel2.get_params()
+        for key in sorted(params2): print("%s : %s" % (key, params2[key]))
         print("Training GP3")
         self.gp3.fit(gp3_train, gp3_y-self.gp3_y_mean)
+        params3 = self.kernel3.get_params()
+        for key in sorted(params3): print("%s : %s" % (key, params3[key]))
         print("Training GP4")
         self.gp4.fit(gp4_train, gp4_y-self.gp4_y_mean)
-
-
-    def make_custom_distribution(self, data, desired_distribution):
-        pass
-    #     for label, desired_percentage in desired_distribution.items():
-    #         current_percentage = current_distribution.get(label, 0) / len(data)
-    #         if current_percentage < desired_percentage:
-    #             # Oversample the class
-    #             oversampled_data = resample(
-    #                 [sample for sample in data if sample[1] == label],
-    #                 n_samples=int(len(data) * (desired_percentage - current_percentage)),
-    #                 random_state=42,
-    #             )
-    #             new_data.extend(oversampled_data)
-    #         elif current_percentage > desired_percentage:
-    #             # Undersample the class
-    #             undersampled_data = resample(
-    #                 [sample for sample in data if sample[1] == label],
-    #                 n_samples=int(len(data) * (current_percentage - desired_percentage)),
-    #                 replace=False,
-    #                 random_state=42,
-    #             )
-    #             new_data.extend(undersampled_data)
-    #         else:
-    #             # No need to modify this class
-    #             new_data.extend([sample for sample in data if sample[1] == label])
-
-    # # Shuffle the new dataset
-    # np.random.shuffle(new_data)
+        params4 = self.kernel4.get_params()
+        for key in sorted(params4): print("%s : %s" % (key, params4[key]))
 
 # You don't have to change this function
 def cost_function(ground_truth: np.ndarray, predictions: np.ndarray, AREA_idxs: np.ndarray) -> float:
@@ -280,6 +278,7 @@ def perform_extended_evaluation(model: Model, output_dir: str = '/results'):
 
     plt.show()
 
+
 def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Extracts the city_area information from the training and test features.
@@ -293,10 +292,12 @@ def extract_city_area_information(train_x: np.ndarray, test_x: np.ndarray) -> ty
     test_x_2D = np.zeros((test_x.shape[0], 2), dtype=float)
     test_x_AREA = np.zeros((test_x.shape[0],), dtype=bool)
 
-    train_x_2D[:] = train_x[:,:2]
-    train_x_AREA[:] = train_x[:,-1] 
-    test_x_2D[:] = test_x[:,:2]
-    test_x_AREA[:] = test_x[:,-1] 
+    #TODO: Extract the city_area information from the training and test features
+    train_x_2D = train_x[:, 0:2]
+    train_x_AREA = train_x[:, 2].astype(bool)
+    test_x_2D = test_x[:, 0:2]
+    test_x_AREA = test_x[:, 2].astype(bool)
+    # DONE
 
     assert train_x_2D.shape[0] == train_x_AREA.shape[0] and test_x_2D.shape[0] == test_x_AREA.shape[0]
     assert train_x_2D.shape[1] == 2 and test_x_2D.shape[1] == 2
@@ -327,7 +328,6 @@ def scatter_plot(x1, y1, x2, y2, train_x_AREA, test_x_AREA):
 
 # you don't have to change this function
 def main():
-    # Load the training dateset and test features
     train_x = np.loadtxt('train_x.csv', delimiter=',', skiprows=1)
     train_y = np.loadtxt('train_y.csv', delimiter=',', skiprows=1)
     test_x = np.loadtxt('test_x.csv', delimiter=',', skiprows=1)
@@ -338,7 +338,7 @@ def main():
     print('Fitting model')
     model = Model()
     if True:
-        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.01, random_state=42)
+        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.7, random_state=42)
         model.fitting_model(y_train,X_train)
 
         # Predict on the test features
