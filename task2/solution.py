@@ -73,6 +73,8 @@ def main():
     swag = SWAGInference(
         train_xs=dataset_train.tensors[0],
         model_dir=model_dir,
+        swag_epochs=30,
+        bma_samples=30
     )
 
     #print(swag.zero_weights)
@@ -298,12 +300,17 @@ class SWAGInference(object):
             
             # TODO(1): Perform inference for all samples in `loader` using current model sample,
             #  and add the predictions to per_model_sample_predictions
-            for i, data in enumerate(loader, 0):
-                input = data[0]
-                per_model_sample_predictions.append(torch.nn.Softmax(self.network.forward(input)))
-
+            batch_predictions = []
+            for data in loader:
+                for instance in data:
+                    output = self.network(instance)
+                    softmax = torch.softmax(output, dim=1)
+                    batch_predictions.append(softmax)
+            
+            predictions = torch.cat(batch_predictions, dim=0)
+            per_model_sample_predictions.append(predictions)
             #raise NotImplementedError("Perform inference using current model")
-
+        
         assert len(per_model_sample_predictions) == self.bma_samples
         assert all(
             isinstance(model_sample_predictions, torch.Tensor)
@@ -314,7 +321,7 @@ class SWAGInference(object):
 
         # TODO(1): Average predictions from different model samples into bma_probabilities
         #raise NotImplementedError("Aggregate predictions from model samples")
-        bma_probabilities = np.mean(per_model_sample_predictions, axis=0)
+        bma_probabilities = torch.stack(per_model_sample_predictions).mean(axis=0)
 
         assert bma_probabilities.dim() == 2 and bma_probabilities.size(1) == 6  # N x C
         return bma_probabilities
@@ -332,9 +339,20 @@ class SWAGInference(object):
             z_1 = torch.randn(param.size())
             # TODO(1): Sample parameter values for SWAG-diagonal
             #raise NotImplementedError("Sample parameter for SWAG-diagonal")
-            values_over_epoch = np.array([epoch_data[name] for epoch_data in self.swag_diagonal])
-            current_mean = np.mean(values_over_epoch, axis=0)
-            current_square = np.mean(values_over_epoch**2, axis=0)
+            
+            values_over_epoch = self._create_weight_copy()
+            square_values = self._create_weight_copy()
+
+            for epoch_data in self.swag_diagonal:
+                values_over_epoch[name] += epoch_data[name]
+                square_values[name] += epoch_data[name]*epoch_data[name]
+
+            current_mean = values_over_epoch[name] * (1/self.bma_samples)
+            current_square = square_values[name] * (1/self.bma_samples)
+
+            #values_over_epoch = np.array([epoch_data[name] for epoch_data in self.swag_diagonal])
+            #current_mean = np.mean(values_over_epoch, axis=0)
+            #current_square = np.mean(values_over_epoch**2, axis=0)
             current_std = current_square - current_mean**2
             
             assert current_mean.size() == param.size() and current_std.size() == param.size()
