@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 
 
 # Set `EXTENDED_EVALUATION` to `True` in order to visualize your predictions.
-EXTENDED_EVALUATION = False
+EXTENDED_EVALUATION = True
 EVALUATION_GRID_POINTS = 300  # Number of grid points used in extended evaluation
 
 # Cost function constants
@@ -134,16 +134,16 @@ class Model(object):
                     gp3_index.append(index)     # put index into training set 3
 
         # Put samples into seperate numpy arrays 
-        gp1_train = np.array([train_x_2D[index,:] for index in gp1_index[::8]])
-        gp2_train = np.array([train_x_2D[index,:] for index in gp2_index[::8]])
-        gp3_train = np.array([train_x_2D[index,:] for index in gp3_index[::8]])
-        gp4_train = np.array([train_x_2D[index,:] for index in gp4_index[::8]])
+        gp1_train = np.array([train_x_2D[index,:] for index in gp1_index[::2]])
+        gp2_train = np.array([train_x_2D[index,:] for index in gp2_index[::2]])
+        gp3_train = np.array([train_x_2D[index,:] for index in gp3_index[::2]])
+        gp4_train = np.array([train_x_2D[index,:] for index in gp4_index[::2]])
 
         # Put measurements into seperate numpy arrays
-        gp1_y = np.array([train_y[index] for index in gp1_index[::8]])
-        gp2_y = np.array([train_y[index] for index in gp2_index[::8]])
-        gp3_y = np.array([train_y[index] for index in gp3_index[::8]])
-        gp4_y = np.array([train_y[index] for index in gp4_index[::8]])
+        gp1_y = np.array([train_y[index] for index in gp1_index[::2]])
+        gp2_y = np.array([train_y[index] for index in gp2_index[::2]])
+        gp3_y = np.array([train_y[index] for index in gp3_index[::2]])
+        gp4_y = np.array([train_y[index] for index in gp4_index[::2]])
 
         #X_train, X_test, y_train, y_test = train_test_split(train_x_2D, train_y, test_size=0.3, random_state=42)
         
@@ -338,7 +338,7 @@ def main():
     print('Fitting model')
     model = Model()
     if True:
-        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.7, random_state=42)
+        X_train, X_test, y_train, y_test, area_train, area_test = train_test_split(train_x_2D, train_y, train_x_AREA, test_size=0.2, random_state=42)
         model.fitting_model(y_train,X_train)
 
         # Predict on the test features
