@@ -220,7 +220,7 @@ class SWAGInference(object):
         )
 
         # TODO(1): Perform initialization for SWAG fitting
-        # ??
+        self.update_swag()
 
         self.network.train()
         with tqdm.trange(self.swag_epochs, desc="Running gradient descent for SWA") as pbar:
@@ -347,8 +347,8 @@ class SWAGInference(object):
                 values_over_epoch[name] += epoch_data[name]
                 square_values[name] += epoch_data[name]*epoch_data[name]
 
-            current_mean = values_over_epoch[name] * (1/self.bma_samples)
-            current_square = square_values[name] * (1/self.bma_samples)
+            current_mean = values_over_epoch[name] * (1/self.swag_epochs)
+            current_square = square_values[name] * (1/self.swag_epochs)
 
             #values_over_epoch = np.array([epoch_data[name] for epoch_data in self.swag_diagonal])
             #current_mean = np.mean(values_over_epoch, axis=0)
