@@ -122,7 +122,7 @@ class SWAGInference(object):
         inference_mode: InferenceMode = InferenceMode.SWAG_DIAGONAL,
         
         # TODO(2): optionally add/tweak hyperparameters
-        swag_epochs: int = 30,
+        swag_epochs: int = 20,
         swag_learning_rate: float = 0.045,
         swag_update_freq: int = 1,
         deviation_matrix_max_rank: int = 15,
@@ -138,7 +138,7 @@ class SWAGInference(object):
         :param deviation_matrix_max_rank: Rank of deviation matrix for full SWAG
         :param bma_samples: Number of networks to sample for Bayesian model averaging during prediction
         """
-
+        print("Starting SwagInference")
         self.model_dir = model_dir
         self.inference_mode = inference_mode
         self.swag_epochs = swag_epochs
@@ -267,7 +267,7 @@ class SWAGInference(object):
 
         # TODO(1): pick a prediction threshold, either constant or adaptive.
         #  The provided value should suffice to pass the easy baseline.
-        self._prediction_threshold = 2.0 / 3.0
+        self._prediction_threshold = 0.71 #2.0 / 3.0
 
         # TODO(2): perform additional calibration if desired.
         #  Feel free to remove or change the prediction threshold.
@@ -353,7 +353,7 @@ class SWAGInference(object):
             #values_over_epoch = np.array([epoch_data[name] for epoch_data in self.swag_diagonal])
             #current_mean = np.mean(values_over_epoch, axis=0)
             #current_square = np.mean(values_over_epoch**2, axis=0)
-            current_std = current_square - current_mean**2
+            current_std = torch.sqrt(torch.clamp(current_square - current_mean**2, 1e-29)) 
             
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
