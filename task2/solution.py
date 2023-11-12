@@ -119,8 +119,7 @@ class SWAGInference(object):
         model_dir: pathlib.Path,
         # TODO(1): change inference_mode to InferenceMode.SWAG_DIAGONAL
         # TODO(2): change inference_mode to InferenceMode.SWAG_FULL
-        inference_mode: InferenceMode = InferenceMode.SWAG_DIAGONAL,
-        #inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
+        inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 20,
@@ -170,7 +169,9 @@ class SWAGInference(object):
         # Full SWAG
         # TODO(2): create attributes for SWAG-diagonal
         #  Hint: check collections.deque
-        self.last_k_samples = collections.deque(maxlen = deviation_matrix_max_rank)        
+        self.last_k_samples = dict()
+        for name, param in self.swag_mean.items():
+            self.last_k_samples[name] = collections.deque(maxlen = deviation_matrix_max_rank)
 
         # Calibration, prediction, and other attributes
         # TODO(2): create additional attributes, e.g., for calibration
@@ -197,11 +198,10 @@ class SWAGInference(object):
             self.swag_square_mean[name] = (n* self.swag_square_mean[name] + param*param)/(n + 1)
             # running average calculation
 
-        # Full SWAG
-        if self.inference_mode == InferenceMode.SWAG_FULL:
-            # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
-            
-            self.last_k_samples.append(current_params-self.swag_mean)
+            # Full SWAG
+            if self.inference_mode == InferenceMode.SWAG_FULL:
+                # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
+                self.last_k_samples[name].append(param-self.swag_mean[name])
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -355,20 +355,20 @@ class SWAGInference(object):
             # TODO(1): Sample parameter values for SWAG-diagonal
             #raise NotImplementedError("Sample parameter for SWAG-diagonal")
             
-            values_over_epoch = self._create_weight_copy()
+            """values_over_epoch = self._create_weight_copy()
             square_values = self._create_weight_copy()
 
             for epoch_data in self.swag_diagonal:
                 values_over_epoch[name] += epoch_data[name]
                 square_values[name] += epoch_data[name]*epoch_data[name]
-
-            current_mean = values_over_epoch[name] * (1/self.swag_epochs)
-            current_square = square_values[name] * (1/self.swag_epochs)
+            """
+            current_mean = self.swag_mean[name]
+            current_square = self.swag_square_mean[name]
 
             #values_over_epoch = np.array([epoch_data[name] for epoch_data in self.swag_diagonal])
             #current_mean = np.mean(values_over_epoch, axis=0)
             #current_square = np.mean(values_over_epoch**2, axis=0)
-            current_std = torch.sqrt(torch.clamp(current_square - current_mean**2, 1e-29)) 
+            current_std = torch.sqrt(torch.clamp(current_square - current_mean**2, 1e-25)) 
             
             assert current_mean.size() == param.size() and current_std.size() == param.size()
 
@@ -379,10 +379,7 @@ class SWAGInference(object):
             if self.inference_mode == InferenceMode.SWAG_FULL:
                 # TODO(2): Sample parameter values for full SWAG
                 
-                
-                self.last_k_samples 
-
-                D = torch.tensor(list(self.last_k_samples))
+                D = torch.tensor(list(self.last_k_samples[name]))
                 k = self.deviation_matrix_max_rank
                 # current_mean is theta_swag
                 sampled_param = current_mean + 1/(np.sqrt(2))*current_std*z_1 + 1/(np.sqrt(2*(k - 1))) * D * z_2
