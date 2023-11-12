@@ -120,6 +120,7 @@ class SWAGInference(object):
         # TODO(1): change inference_mode to InferenceMode.SWAG_DIAGONAL
         # TODO(2): change inference_mode to InferenceMode.SWAG_FULL
         inference_mode: InferenceMode = InferenceMode.SWAG_DIAGONAL,
+        #inference_mode: InferenceMode = InferenceMode.SWAG_FULL,
         
         # TODO(2): optionally add/tweak hyperparameters
         swag_epochs: int = 20,
@@ -138,7 +139,7 @@ class SWAGInference(object):
         :param deviation_matrix_max_rank: Rank of deviation matrix for full SWAG
         :param bma_samples: Number of networks to sample for Bayesian model averaging during prediction
         """
-        print("Starting SwagInference")
+        print("Starting SwagInference 2")
         self.model_dir = model_dir
         self.inference_mode = inference_mode
         self.swag_epochs = swag_epochs
@@ -163,9 +164,13 @@ class SWAGInference(object):
         
         self.swag_diagonal = []
 
+        self.swag_mean = self._create_weight_copy()
+        self.swag_square_mean = self._create_weight_copy()
+        
         # Full SWAG
         # TODO(2): create attributes for SWAG-diagonal
         #  Hint: check collections.deque
+        self.last_k_samples = collections.deque(maxlen = deviation_matrix_max_rank)        
 
         # Calibration, prediction, and other attributes
         # TODO(2): create additional attributes, e.g., for calibration
@@ -186,10 +191,17 @@ class SWAGInference(object):
             #print("\n:::::", type(self.swag_diagonal[-1]),self.swag_diagonal[-1])
             self.swag_diagonal[-1][name] = param
 
+            n = self.current_epoch / self.swag_update_freq
+
+            self.swag_mean[name] = (n* self.swag_mean[name] + param)/(n + 1)
+            self.swag_square_mean[name] = (n* self.swag_square_mean[name] + param*param)/(n + 1)
+            # running average calculation
+
         # Full SWAG
         if self.inference_mode == InferenceMode.SWAG_FULL:
             # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
-            raise NotImplementedError("Update full SWAG statistics")
+            
+            self.last_k_samples.append(current_params-self.swag_mean)
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -220,8 +232,9 @@ class SWAGInference(object):
         )
 
         # TODO(1): Perform initialization for SWAG fitting
+        self.current_epoch = 1
         self.update_swag()
-
+        
         self.network.train()
         with tqdm.trange(self.swag_epochs, desc="Running gradient descent for SWA") as pbar:
             pbar_dict = {}
@@ -253,6 +266,7 @@ class SWAGInference(object):
 
                 # TODO(1): Implement periodic SWAG updates using the attributes defined in __init__
                 self.update_swag()
+                self.current_epoch += 1
 
     def calibrate(self, validation_data: torch.utils.data.Dataset) -> None:
         """
@@ -337,6 +351,7 @@ class SWAGInference(object):
         for name, param in self.network.named_parameters():
             # SWAG-diagonal part
             z_1 = torch.randn(param.size())
+            z_2 = torch.randn(self.deviation_matrix_max_rank)
             # TODO(1): Sample parameter values for SWAG-diagonal
             #raise NotImplementedError("Sample parameter for SWAG-diagonal")
             
@@ -363,8 +378,14 @@ class SWAGInference(object):
             # Full SWAG part
             if self.inference_mode == InferenceMode.SWAG_FULL:
                 # TODO(2): Sample parameter values for full SWAG
-                raise NotImplementedError("Sample parameter for full SWAG")
-                sampled_param += ...
+                
+                
+                self.last_k_samples 
+
+                D = torch.tensor(list(self.last_k_samples))
+                k = self.deviation_matrix_max_rank
+                # current_mean is theta_swag
+                sampled_param = current_mean + 1/(np.sqrt(2))*current_std*z_1 + 1/(np.sqrt(2*(k - 1))) * D * z_2
 
             # Modify weight value in-place; directly changing self.network
             param.data = sampled_param
