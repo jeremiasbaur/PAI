@@ -73,7 +73,7 @@ def main():
     swag = SWAGInference(
         train_xs=dataset_train.tensors[0],
         model_dir=model_dir,
-        swag_epochs=30,
+        swag_epochs=2,
         bma_samples=30
     )
 
@@ -170,8 +170,10 @@ class SWAGInference(object):
         # TODO(2): create attributes for SWAG-diagonal
         #  Hint: check collections.deque
         self.last_k_samples = dict()
+        self.last_k_means = dict()
         for name, param in self.swag_mean.items():
             self.last_k_samples[name] = collections.deque(maxlen = self.deviation_matrix_max_rank)
+            self.last_k_means[name] = collections.deque(maxlen = self.deviation_matrix_max_rank)
 
         # print('length of last k samples:', len(self.last_k_samples))
 
@@ -204,6 +206,7 @@ class SWAGInference(object):
                 # TODO(2): update full SWAG attributes for weight `name` using `current_params` and `param`
                 if self.current_epoch!=0:
                     self.last_k_samples[name].append(param-self.swag_mean[name])
+                    self.last_k_means[name].append(self.swag_mean[name])
 
     def fit_swag(self, loader: torch.utils.data.DataLoader) -> None:
         """
@@ -386,6 +389,10 @@ class SWAGInference(object):
                 #print('length of list:', len(list(self.last_k_samples[name])))
                 
                 D = torch.stack(list(self.last_k_samples[name])).T #torch.transpose(torch.tensor(list(self.last_k_samples[name])),0,1)
+                D_means = torch.stack(list(self.last_k_means[name])).T #torch.transpose(torch.tensor(list(self.last_k_samples[name])),0,1)
+                final_mean_over_k = torch.stack([current_mean for i in range(self.deviation_matrix_max_rank if self.deviation_matrix_max_rank > self.swag_epochs else self.swag_epochs)])
+                D = D + D_means - final_mean_over_k.T
+
                 k = self.deviation_matrix_max_rank
 
                 # current_mean is theta_swag
