@@ -390,7 +390,7 @@ class SWAGInference(object):
                 
                 D = torch.stack(list(self.last_k_samples[name])).T #torch.transpose(torch.tensor(list(self.last_k_samples[name])),0,1)
                 D_means = torch.stack(list(self.last_k_means[name])).T #torch.transpose(torch.tensor(list(self.last_k_samples[name])),0,1)
-                final_mean_over_k = torch.stack([current_mean for i in range(self.deviation_matrix_max_rank if self.deviation_matrix_max_rank > self.swag_epochs else self.swag_epochs)])
+                final_mean_over_k = torch.stack([current_mean for i in range(self.deviation_matrix_max_rank if self.deviation_matrix_max_rank < self.swag_epochs else self.swag_epochs)])
                 D = D + D_means - final_mean_over_k.T
 
                 k = self.deviation_matrix_max_rank
