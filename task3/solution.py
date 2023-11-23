@@ -4,7 +4,8 @@ from scipy.optimize import fmin_l_bfgs_b
 # import additional ...
 from sklearn.gaussian_process.kernels import *
 from sklearn.gaussian_process import GaussianProcessRegressor
-
+from scipy.stats import norm
+import math
 
 # global variables
 DOMAIN = np.array([[0, 10]])  # restrict \theta in [0, 10]
@@ -17,21 +18,21 @@ class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration."""
         # TODO: Define all relevant class members for your BO algorithm here.
-        self.f_kernel = Matern(nu = 2.5) #+ WhiteKernel(noise_level=0.15)
-        self.v_kernel = np.sqrt(2)*RBF(length_scale=1) + 4 #+ WhiteKernel(noise_level=0.0001)
-        self.gpf = GaussianProcessRegressor(kernel=self.f_kernel, random_state=0, normalize_y=False)
-        self.gpv = GaussianProcessRegressor(kernel=self.v_kernel, random_state=0, normalize_y=False)
-        self.tolerance = 4
-        self.lamb = 10
-        self.x_data = []#np.zeros(shape = (1,DOMAIN.shape(0)))
-        self.f_data = []#np.zeros(shape = (1,1))
-        self.v_data = []#np.zeros(shape = (1,1))
-        pass
+        self.D = {'x_data':list(), 'f_data':list(), 'v_data':list()} # This is our data
+
+        self.f_kernel = Matern(nu=2.5)
+        self.v_kernel = DotProduct() + Matern(nu=2.5) + ConstantKernel(constant_value=4)
+
+        self.gpf = GaussianProcessRegressor(kernel=self.f_kernel, alpha=0.15, random_state=0, normalize_y=False)
+        self.gpv = GaussianProcessRegressor(kernel=self.v_kernel, alpha=0.0001, random_state=0, normalize_y=False) 
+    
+        self.lambda_ = 1
+        self.beta = 1
 
     def next_recommendation(self):
         """
         Recommend the next input to sample.
-
+        
         Returns
         -------
         recommendation: float
@@ -41,9 +42,18 @@ class BO_algo():
         # using functions f and v.
         # In implementing this function, you may use
         # optimize_acquisition_function() defined below.
-        return self.optimize_acquisition_function() 
+        #x_opt = self.optimize_acquisition_function()
 
-        #raise NotImplementedError
+        # My guess:
+        # fit - the last thing that is done before this function is called is the data being added to the dataset
+        x_input = np.array(self.D['x_data']).reshape(-1, 1)
+        self.gpf.fit(np.array(x_input), np.array(self.D['f_data']))
+        self.gpv.fit(np.array(x_input), np.array(self.D['v_data']))
+
+        x_opt = np.zeros((1, DOMAIN.shape[0]))
+        x_opt[0, 0] = self.optimize_acquisition_function()
+        
+        return x_opt
 
     def optimize_acquisition_function(self):
         """Optimizes the acquisition function defined below (DO NOT MODIFY).
@@ -74,7 +84,7 @@ class BO_algo():
         x_opt = x_values[ind].item()
 
         return x_opt
-
+    
     def acquisition_function(self, x: np.ndarray):
         """Compute the acquisition function for x.
 
@@ -92,18 +102,13 @@ class BO_algo():
         x = np.atleast_2d(x)
         # TODO: Implement the acquisition function you want to optimize.
 
-        #Perform thompson sampling as in Lecture 8, Slide 44
-        #f = self.gpf.posterior_samples_f(x)
-        #v = self.gpv.posterior_samples_f(x)
         f_mean, f_std = self.gpf.predict(x, return_std=True)
         v_mean, v_std = self.gpv.predict(x, return_std=True)
 
-        f_vals = np.random.normal(loc = f_mean, scale = f_std)
-        v_vals = np.random.normal(loc = v_mean, scale = v_std)
-        
-        return f_vals - self.lamb*max(v_vals - SAFETY_THRESHOLD, 0)
+        prob_v = norm.cdf(SAFETY_THRESHOLD, loc=v_mean, scale=v_std)
 
-        #raise NotImplementedError
+        return ((prob_v)**4)
+        
 
     def add_data_point(self, x: float, f: float, v: float):
         """
@@ -115,23 +120,15 @@ class BO_algo():
             structural features
         f: float
             logP obj func
+            f: Mapping from structural features to the candidate´s corresponding bioavailibility (logP)
         v: float
             SA constraint func
+            v: Mapping from structural features to the correspoinding synthetic accessibility of a candidate
         """
-
         # TODO: Add the observed data {x, f, v} to your model.
-        #Unsure if this does what its supposed to
-        self.x_data.append(x)
-        self.f_data.append(f)
-        self.v_data.append(v)
-
-        x_input =  np.array(self.x_data).reshape(-1, 1)
-        self.gpf.fit(np.array(x_input), np.array(self.f_data))
-        self.gpv.fit(np.array(x_input), np.array(self.v_data))
-
-        #self.gpf.fit(x_arr, f)
-        #self.gpv.fit(x_arr, v)
-        #raise NotImplementedError
+        self.D['x_data'].append(float(x))
+        self.D['f_data'].append(f)
+        self.D['v_data'].append(v)
 
     def get_solution(self):
         """
@@ -143,24 +140,17 @@ class BO_algo():
             the optimal solution of the problem
         """
         # TODO: Return your predicted safe optimum of f.
-        #x_current = self.next_recommendation()
+        selection = np.array(self.D['v_data']).reshape(-1) < SAFETY_THRESHOLD
+        #print('selection of possible solutions:', selection)
+        f_arr = np.array(self.D['f_data']).reshape(-1)
+        #print('f of data (bioavailability):', f_arr)
+        solution = np.max(f_arr[selection])
+        arg_solution = np.argmax(f_arr[selection])
+        #print('solution:', solution)
+        optimum = self.D['x_data'][arg_solution]
+        #print('x data:', self.D['x_data'])
 
-        # f_mean, f_std = self.gpf.predict(x_current, return_std=True)
-        # v_mean, v_std = self.gpv.predict(x_current, return_std=True)
-        # f_current = f_mean + np.random.normal(scale = 0.15)
-        # v_current = v_mean + np.random.normal(scale = 0.0001)
-        
-        #Might have to change this
-        #self.add_data_point(x_current, f_current, v_current)
-
-        #self.gpf.fit(self.x_data, self.f_data)
-        #self.gpv.fit(self.x_data, self.v_data)
-        
-        mask = [bool(v > SAFETY_THRESHOLD) for v in self.v_data]
-        f_vals = np.array(self.f_data).reshape(-1)
-        f_max = max(f_vals[mask])
-        return np.where(f_vals == f_max)[0]
-        #raise NotImplementedError 
+        return optimum
 
     def plot(self, plot_recommendation: bool = True):
         """Plot objective and constraint posterior for debugging (OPTIONAL).
@@ -210,24 +200,26 @@ def main():
     """FOR ILLUSTRATION / TESTING ONLY (NOT CALLED BY CHECKER)."""
     # Init problem
     agent = BO_algo()
+
     # Add initial safe point
     x_init = get_initial_safe_point()
     obj_val = f(x_init)
     cost_val = v(x_init)
     agent.add_data_point(x_init, obj_val, cost_val)
+
     # Loop until budget is exhausted
     for j in range(20):
         # Get next recommendation
         x = agent.next_recommendation()
 
         # Check for valid shape
-        # assert x.shape == (1, DOMAIN.shape[0]), \
-        #     f"The function next recommendation must return a numpy array of " \
-        #     f"shape (1, {DOMAIN.shape[0]})"
+        assert x.shape == (1, DOMAIN.shape[0]), \
+            f"The function next recommendation must return a numpy array of " \
+            f"shape (1, {DOMAIN.shape[0]})"
 
         # Obtain objective and constraint observation
-        obj_val = f(x) + np.random.normal()
-        cost_val = v(x) + np.random.normal()
+        obj_val = f(x) + np.random.randn()
+        cost_val = v(x) + np.random.randn()
         agent.add_data_point(x, obj_val, cost_val)
 
     # Validate solution
