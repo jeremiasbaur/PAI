@@ -17,16 +17,27 @@ class NeuralNetwork(nn.Module):
     You may use this function to parametrize your policy and critic networks.
     '''
     def __init__(self, input_dim: int, output_dim: int, hidden_size: int, 
-                                hidden_layers: int, activation: str):
+                                hidden_layers: int, activation=None):
         super(NeuralNetwork, self).__init__()
 
         # TODO: Implement this function which should define a neural network 
         # with a variable number of hidden layers and hidden units.
         # Here you should define layers which your network will use.
+        self.input_layer = nn.Linear(input_dim, hidden_size)
+        self.hidden_layer = nn.Linear(hidden_size, hidden_layer)
+        self.output_layer = nn.Linear(hidden_size, output_dim)
+        if activation is not None:
+            self.activation = activation
+        else:
+            self.activation = nn.ReLU()
+        self.hidden_layers = hidden_layers
 
     def forward(self, s: torch.Tensor) -> torch.Tensor:
         # TODO: Implement the forward pass for the neural network you have defined.
-        pass
+        x = self.activation(self.input_layer(s))
+        for i in range(self.hidden_layers):
+            x = self.activation(self.hidden_layer(x))
+        return self.output_layer(x)
     
 class Actor:
     def __init__(self,hidden_size: int, hidden_layers: int, actor_lr: float,
@@ -49,6 +60,7 @@ class Actor:
         '''
         # TODO: Implement this function which sets up the actor network. 
         # Take a look at the NeuralNetwork class in utils.py. 
+        self.actor = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers)
         pass
 
     def clamp_log_std(self, log_std: torch.Tensor) -> torch.Tensor:
@@ -74,6 +86,10 @@ class Actor:
         # TODO: Implement this function which returns an action and its log probability.
         # If working with stochastic policies, make sure that its log_std are clamped 
         # using the clamp_log_std function.
+
+        action = self.actor.forward(state)
+        # log_prob = ?
+
         assert action.shape == (state.shape[0], self.action_dim) and \
             log_prob.shape == (state.shape[0], self.action_dim), 'Incorrect shape for action or log_prob.'
         return action, log_prob
@@ -95,7 +111,8 @@ class Critic:
     def setup_critic(self):
         # TODO: Implement this function which sets up the critic(s). Take a look at the NeuralNetwork 
         # class in utils.py. Note that you can have MULTIPLE critic networks in this class.
-        pass
+
+        self.critic = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers)
 
 class TrainableParameter:
     '''
