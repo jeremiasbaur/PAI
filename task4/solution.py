@@ -95,11 +95,12 @@ class Actor:
         # using the clamp_log_std function.
         
         x, action = self.actor.forward(state)
-        print(x.shape, action.shape)
-
-        if deterministic: torch.tanh(action), log_prob # TODO maybe change?
+        #print(x.shape, action.shape)
         
         mu = self.mu(x)
+
+        if deterministic: torch.tanh(mu), log_prob # TODO maybe change?
+        
         sigma = self.clamp_log_std(self.sigma(x))
         std = torch.exp(sigma)
         
@@ -108,7 +109,7 @@ class Actor:
         action = torch.tanh(action)
 
         #print(log_prob)
-        log_prob = prob.log_prob(action) #- torch.log(1 - action.pow(2) + epsilon)
+        log_prob = prob.log_prob(action) #- torch.log(1 - action.pow(1) + 1e-10)
         #print(action, log_prob)
         #print(log_prob.shape, (state.shape[0], self.action_dim), action.shape)
         
@@ -140,9 +141,15 @@ class Critic:
         self.critic_target1 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
         self.critic_target2 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
         
+        self.value = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
+        self.target_value = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
+
         # Optimizers
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=self.critic_lr)
         self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=self.critic_lr)
+
+        self.value_optimizer = optim.Adam(self.value.parameters(), lr=self.critic_lr)
+        self.target_value_optimizer = optim.Adam(self.target_value.parameters(), lr=self.critic_lr)
 
 class TrainableParameter:
     '''
@@ -182,11 +189,11 @@ class Agent:
         # TODO: Setup off-policy agent with policy and critic classes. 
         # Feel free to instantiate any other parameters you feel you might need.
         
-        self.actor = Actor(100, 2, 0.001, self.state_dim, self.action_dim)
-        self.critic = Critic(100, 2, 0.001, self.state_dim, self.action_dim)
-        self.gamma = TrainableParameter(init_param=0.5, lr_param=1e-4, train_param=True)
-        self.alpha = TrainableParameter(init_param=0.5, lr_param=1e-4, train_param=True)
-        self.tau = TrainableParameter(init_param=0.5, lr_param=1e-4, train_param=True)
+        self.actor = Actor(128, 2, 3e-4, self.state_dim, self.action_dim)
+        self.critic = Critic(128, 2, 3e-4, self.state_dim, self.action_dim)
+        self.gamma = TrainableParameter(init_param=0.99, lr_param=3e-4, train_param=True)
+        self.alpha = TrainableParameter(init_param=0.99, lr_param=3e-4, train_param=True)
+        self.tau = TrainableParameter(init_param=5*1e-3, lr_param=1e-5, train_param=True)
 
         self.target_entropy = -1
 
@@ -203,7 +210,8 @@ class Agent:
         action, log_prob = self.actor.get_action_and_log_prob(s, train)
         action = action.detach().numpy()
         assert action.shape == (1,), 'Incorrect action shape.'
-        assert isinstance(action, np.ndarray ), 'Action dtype must be np.ndarray' 
+        assert isinstance(action, np.ndarray ), 'Action dtype must be np.ndarray'
+        #print(action) 
         return action
 
     @staticmethod
@@ -249,30 +257,25 @@ class Agent:
         s_batch, a_batch, r_batch, s_prime_batch = batch
 
         # value function:
-        with torch.no_grad():
-            next_actions, next_log_probs = self.actor.get_action_and_log_prob(s_prime_batch, False)
-            state_action = torch.cat([s_prime_batch, next_actions], 1)
-            Q_target1_next = self.critic.critic_target1(state_action)[1]
-            Q_target2_next = self.critic.critic_target2(state_action)[1]
-
-            Q_target_next = torch.min(Q_target1_next, Q_target2_next) - self.alpha.get_param() * next_log_probs
-            Q_target = r_batch + self.gamma.get_param() * Q_target_next
+        #with torch.no_grad():
+        actions_, log_probs_ = self.actor.get_action_and_log_prob(s_batch, False)
         
-        state_action = torch.cat([s_batch, a_batch], 1)
-        # Critic loss
-        Q1 = self.critic.critic1(state_action)[1]
-        Q2 = self.critic.critic2(state_action)[1]
-        critic_loss1 = F.mse_loss(Q1, Q_target)
-        critic_loss2 = F.mse_loss(Q2, Q_target)
+        state_action = torch.cat([s_batch, actions_], 1)
+        q1_new = self.critic.critic1(state_action)[1]
+        q2_new = self.critic.critic2(state_action)[1]
+        
+        #Q_target1_next = self.critic.critic_target1(state_action)[1]
+        #Q_target2_next = self.critic.critic_target2(state_action)[1]
+        v = self.critic.value(s_batch)[1]
+        v_ = self.critic.target_value(s_prime_batch)[1]
 
-        # Update critics
-        self.critic.critic1_optimizer.zero_grad()
-        critic_loss1.backward()
-        self.critic.critic1_optimizer.step()
-
-        self.critic.critic2_optimizer.zero_grad()
-        critic_loss2.backward()
-        self.critic.critic2_optimizer.step()
+        Q_target = torch.min(q1_new, q2_new) - self.alpha.get_log_param() * log_probs_
+        #Q_target =  #self.critic.value(s_batch) #r_batch #+ self.gamma.get_param() * Q_target_next
+    
+        value_loss = 0.5*F.mse_loss(v, Q_target)
+        self.critic.value_optimizer.zero_grad()
+        value_loss.backward()
+        self.critic.value_optimizer.step()
 
         # Actor loss
         new_actions, log_probs = self.actor.get_action_and_log_prob(s_batch, False)
@@ -280,21 +283,40 @@ class Agent:
         Q1_new = self.critic.critic1(state_action)[1]
         Q2_new = self.critic.critic2(state_action)[1]
         Q_new = torch.min(Q1_new, Q2_new)
-        actor_loss = (self.alpha.get_param() * log_probs - Q_new).mean()
+        actor_loss = (self.alpha.get_log_param() * log_probs - Q_new).mean()
 
         # Update actor
         self.actor.optimizer.zero_grad()
+        #print(actor_loss)
         actor_loss.backward()
         self.actor.optimizer.step()
 
-         # Update target networks
-        self.critic_target_update(self.critic.critic1, self.critic.critic_target1, self.tau.get_param(), True)
-        self.critic_target_update(self.critic.critic2, self.critic.critic_target2, self.tau.get_param(), True)
+        # Critic loss
+        state_action = torch.cat([s_batch, a_batch], 1)
+        Q1 = self.critic.critic1(state_action)[1]
+        Q2 = self.critic.critic2(state_action)[1]
 
-        alpha_loss = -(self.alpha.get_log_param() * (log_probs + self.target_entropy).detach()).mean()
+        Q_target = v_ * self.gamma.get_param() + r_batch * 2
+        critic_loss1 = 0.5 * F.mse_loss(Q1, Q_target)
+        critic_loss2 = 0.5 * F.mse_loss(Q2, Q_target)
+        
+        c_loss = torch.add(critic_loss1, critic_loss2)
+        # Update critics
+        self.critic.critic1_optimizer.zero_grad()
+        self.critic.critic2_optimizer.zero_grad()
+        
+        c_loss.backward()
+        self.critic.critic1_optimizer.step()
+        self.critic.critic2_optimizer.step()
+
+        # Update target networks
+        self.critic_target_update(self.critic.value, self.critic.target_value, self.tau.get_param(), True)
+        #self.critic_target_update(self.critic.critic2, self.critic.critic_target2, self.tau.get_param(), True)
+        
+        alpha_loss = -(self.alpha.get_log_param() * (log_probs + 0*self.target_entropy).detach()).mean()
         self.alpha.optimizer.zero_grad()
         alpha_loss.backward()
-        self.alpha.optimizer.step()
+        #self.alpha.optimizer.step()
         
         #actions , log_probs = self.actor.get_action_and_log_prob(s_batch, deterministic=False)
         #log_probs = log_probs.view(-1)
