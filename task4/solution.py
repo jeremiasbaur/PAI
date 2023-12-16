@@ -8,6 +8,7 @@ from gym.wrappers.monitoring.video_recorder import VideoRecorder
 import warnings
 from typing import Union
 from utils import ReplayBuffer, get_env, run_episode
+#import time
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -18,12 +19,13 @@ class NeuralNetwork(nn.Module):
     You may use this function to parametrize your policy and critic networks.
     '''
     def __init__(self, input_dim: int, output_dim: int, hidden_size: int, 
-                                hidden_layers: int, activation=None):
+                                hidden_layers: int, activation=None, device: torch.device = torch.device('cpu')):
         super(NeuralNetwork, self).__init__()
 
         # TODO: Implement this function which should define a neural network 
         # with a variable number of hidden layers and hidden units.
         # Here you should define layers which your network will use.
+        self.device = device
         if activation is not None:
             self.activation = activation
         else:
@@ -32,8 +34,9 @@ class NeuralNetwork(nn.Module):
         layers = [nn.Linear(input_dim, hidden_size), self.activation] # input layer
         for _ in range(hidden_layers - 1):
             layers += [nn.Linear(hidden_size, hidden_size), self.activation] # hidden layers
-        self.output_layer = nn.Linear(hidden_size, output_dim) # output layer
+        self.output_layer = nn.Linear(hidden_size, output_dim).to(self.device) # output layer
         self.model = nn.Sequential(*layers)
+        self.model = self.model.to(self.device)
 
     def forward(self, s: torch.Tensor):
         # TODO: Implement the forward pass for the neural network you have defined.
@@ -62,7 +65,7 @@ class Actor:
         '''
         # TODO: Implement this function which sets up the actor network. 
         # Take a look at the NeuralNetwork class in utils.py. 
-        self.actor = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers)
+        self.actor = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers, device=self.device)
 
         self.mu = nn.Linear(self.hidden_size, self.action_dim, device=self.device)
         self.sigma = nn.Linear(self.hidden_size, self.action_dim, device=self.device)
@@ -94,7 +97,7 @@ class Actor:
         # If working with stochastic policies, make sure that its log_std are clamped 
         # using the clamp_log_std function.
         
-        x, action = self.actor.forward(state)
+        x, action = self.actor.forward(state.to(self.device))
         #print(x.shape, action.shape)
         
         mu = self.mu(x)
@@ -109,7 +112,9 @@ class Actor:
         action = torch.tanh(action)
 
         #print(log_prob)
-        log_prob = prob.log_prob(action) #- torch.log(1 - action.pow(1) + 1e-10)
+        log_prob = prob.log_prob(action) #- torch.log(1 - action.pow(2) + 1e-10)
+        #print(log_prob)
+        #log_prob = log_prob.sum(1)
         #print(action, log_prob)
         #print(log_prob.shape, (state.shape[0], self.action_dim), action.shape)
         
@@ -136,13 +141,13 @@ class Critic:
         # TODO: Implement this function which sets up the critic(s). Take a look at the NeuralNetwork 
         # class in utils.py. Note that you can have MULTIPLE critic networks in this class.
 
-        self.critic1 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
-        self.critic2 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
-        self.critic_target1 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
-        self.critic_target2 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
+        self.critic1 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers,device=self.device)
+        self.critic2 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers,device=self.device)
+        self.critic_target1 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers,device=self.device)
+        self.critic_target2 = NeuralNetwork(self.state_dim + self.action_dim, self.action_dim, self.hidden_size, self.hidden_layers,device=self.device)
         
-        self.value = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
-        self.target_value = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers).to(self.device)
+        self.value = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers,device=self.device)
+        self.target_value = NeuralNetwork(self.state_dim, self.action_dim, self.hidden_size, self.hidden_layers,device=self.device)
 
         # Optimizers
         self.critic1_optimizer = optim.Adam(self.critic1.parameters(), lr=self.critic_lr)
@@ -180,6 +185,7 @@ class Agent:
         # If your PC possesses a GPU, you should be able to use it for training, 
         # as self.device should be 'cuda' in that case.
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = "cpu"
         print("Using device: {}".format(self.device))
         self.memory = ReplayBuffer(self.min_buffer_size, self.max_buffer_size, self.device)
         
@@ -189,11 +195,11 @@ class Agent:
         # TODO: Setup off-policy agent with policy and critic classes. 
         # Feel free to instantiate any other parameters you feel you might need.
         
-        self.actor = Actor(128, 2, 6e-4, self.state_dim, self.action_dim)
-        self.critic = Critic(128, 2, 6e-4, self.state_dim, self.action_dim)
+        self.actor = Actor(128, 2, 3e-4, self.state_dim, self.action_dim, self.device)
+        self.critic = Critic(128, 2, 3e-4, self.state_dim, self.action_dim, self.device)
         self.gamma = TrainableParameter(init_param=0.99, lr_param=3e-4, train_param=True)
-        self.alpha = TrainableParameter(init_param=1, lr_param=3e-4, train_param=True)
-        self.tau = TrainableParameter(init_param=5*1e-3, lr_param=1e-5, train_param=True)
+        self.alpha = TrainableParameter(init_param=0.990, lr_param=1e-8, train_param=True)
+        self.tau = TrainableParameter(init_param=5e-3, lr_param=1e-5, train_param=True)
 
         self.target_entropy = -1
 
@@ -208,7 +214,7 @@ class Agent:
         s = torch.from_numpy(s).to(self.device)
         #print(s)
         action, log_prob = self.actor.get_action_and_log_prob(s, train)
-        action = action.detach().numpy()
+        action = action.detach().cpu().numpy()
         assert action.shape == (1,), 'Incorrect action shape.'
         assert isinstance(action, np.ndarray ), 'Action dtype must be np.ndarray'
         #print(action) 
@@ -255,11 +261,15 @@ class Agent:
         # Batch sampling
         batch = self.memory.sample(self.batch_size)
         s_batch, a_batch, r_batch, s_prime_batch = batch
+        a_batch=a_batch.to(self.device)
+        s_batch=s_batch.to(self.device)
+        r_batch = r_batch.to(self.device)
+        s_prime_batch = s_prime_batch.to(self.device)
 
         # value function:
         #with torch.no_grad():
         actions_, log_probs_ = self.actor.get_action_and_log_prob(s_batch, False)
-        
+        #print(actions_.get_device(), s_batch.get_device())
         state_action = torch.cat([s_batch, actions_], 1)
         q1_new = self.critic.critic1(state_action)[1]
         q2_new = self.critic.critic2(state_action)[1]
@@ -314,9 +324,10 @@ class Agent:
         #self.critic_target_update(self.critic.critic2, self.critic.critic_target2, self.tau.get_param(), True)
         
         alpha_loss = -(self.alpha.get_log_param() * (log_probs + 1*self.target_entropy).detach()).mean()
+        #print(alpha_loss)
         self.alpha.optimizer.zero_grad()
-        alpha_loss.backward()
-        self.alpha.optimizer.step()
+        #alpha_loss.backward()
+        #self.alpha.optimizer.step()
         
         #actions , log_probs = self.actor.get_action_and_log_prob(s_batch, deterministic=False)
         #log_probs = log_probs.view(-1)
@@ -365,7 +376,9 @@ if __name__ == '__main__':
     env = get_env(g=10.0, train=True)
 
     for EP in range(TRAIN_EPISODES):
+        print(f'Episode {EP}')
         run_episode(env, agent, None, verbose, train=True)
+        
 
     if verbose:
         print('\n')
