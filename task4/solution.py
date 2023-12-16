@@ -189,10 +189,10 @@ class Agent:
         # TODO: Setup off-policy agent with policy and critic classes. 
         # Feel free to instantiate any other parameters you feel you might need.
         
-        self.actor = Actor(128, 2, 3e-4, self.state_dim, self.action_dim)
-        self.critic = Critic(128, 2, 3e-4, self.state_dim, self.action_dim)
+        self.actor = Actor(128, 2, 6e-4, self.state_dim, self.action_dim)
+        self.critic = Critic(128, 2, 6e-4, self.state_dim, self.action_dim)
         self.gamma = TrainableParameter(init_param=0.99, lr_param=3e-4, train_param=True)
-        self.alpha = TrainableParameter(init_param=0.99, lr_param=3e-4, train_param=True)
+        self.alpha = TrainableParameter(init_param=1, lr_param=3e-4, train_param=True)
         self.tau = TrainableParameter(init_param=5*1e-3, lr_param=1e-5, train_param=True)
 
         self.target_entropy = -1
@@ -313,10 +313,10 @@ class Agent:
         self.critic_target_update(self.critic.value, self.critic.target_value, self.tau.get_param(), True)
         #self.critic_target_update(self.critic.critic2, self.critic.critic_target2, self.tau.get_param(), True)
         
-        alpha_loss = -(self.alpha.get_log_param() * (log_probs + 0*self.target_entropy).detach()).mean()
+        alpha_loss = -(self.alpha.get_log_param() * (log_probs + 1*self.target_entropy).detach()).mean()
         self.alpha.optimizer.zero_grad()
         alpha_loss.backward()
-        #self.alpha.optimizer.step()
+        self.alpha.optimizer.step()
         
         #actions , log_probs = self.actor.get_action_and_log_prob(s_batch, deterministic=False)
         #log_probs = log_probs.view(-1)
@@ -358,7 +358,7 @@ if __name__ == '__main__':
 
     # You may set the save_video param to output the video of one of the evalution episodes, or 
     # you can disable console printing during training and testing by setting verbose to False.
-    save_video = False
+    save_video = True
     verbose = True
 
     agent = Agent()
